@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Financeiro Corporativo</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-blue: #004a8f; 
+            --primary-dark: #003366;
+            --accent-gray: #eef2f5;
+            --text-dark: #333333;
+            --border-soft: 1px solid #dcdcdc;
+            --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05);
+            
+            /* CORES */
+            --header-pay-bg: #8B0000; 
+            --header-rec-bg: #1976D2; 
+            --chart-pay-color: #8B0000;
+            --chart-rec-color: #1976D2; 
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--accent-gray);
+            margin: 0;
+            padding: 20px;
+            color: var(--text-dark);
+        }
+
+        /* --- Header --- */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            padding: 15px 30px;
+            border-radius: 12px;
+            box-shadow: var(--shadow-card);
+            margin-bottom: 20px;
+        }
+        header img { max-height: 50px; margin-right: 20px; }
+        header h1 {
+            color: var(--primary-blue);
+            font-size: 30px;
+            text-shadow: 2px 2px 4px #cccccc;
+            margin: 0;
+            font-weight: 700;
+        }
+
+        /* --- Controles --- */
+        .controls-container {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: var(--shadow-card);
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: flex-end;
+        }
+        .filter-group { display: flex; flex-direction: column; }
+        .filter-group label { font-size: 12px; font-weight: 600; color: var(--primary-dark); margin-bottom: 5px; }
+        select, input[type="date"] {
+            padding: 8px 12px;
+            border: var(--border-soft);
+            border-radius: 6px;
+            background-color: #f9f9f9;
+            font-family: inherit;
+            min-width: 120px;
+        }
+        select:disabled {
+            background-color: #eee;
+            color: #999;
+            cursor: not-allowed;
+        }
+        button.btn-load {
+            background-color: var(--primary-blue);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        button.btn-load:hover { background-color: var(--primary-dark); }
+
+        /* --- KPIs --- */
+        .kpi-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .kpi-card {
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: var(--shadow-card);
+            border-left: 5px solid var(--primary-blue);
+            text-align: center;
+        }
+        .kpi-card:nth-child(1) { border-left-color: var(--chart-pay-color); }
+        .kpi-card:nth-child(2) { border-left-color: var(--chart-rec-color); }
+        .kpi-card:nth-child(3) { border-left-color: #2196F3; }
+        .kpi-card:nth-child(4) { border-left-color: #4CAF50; }
+        .kpi-title { font-size: 14px; color: #666; font-weight: 600; margin-bottom: 5px; text-transform: uppercase; }
+        .kpi-value { font-size: 24px; font-weight: 700; color: var(--text-dark); }
+
+        /* --- Layout --- */
+        .main-split { display: flex; gap: 20px; margin-bottom: 20px; }
+        .panel-60 { width: 40%; display: flex; gap: 10px; } 
+        .panel-40 { width: 60%; display: flex; gap: 10px; flex-direction: column; } 
+
+        .sub-panel {
+            flex: 1;
+            background: white;
+            padding: 10px;
+            border-radius: 12px;
+            box-shadow: var(--shadow-card);
+            overflow: hidden;
+        }
+
+        /* --- Tabelas --- */
+        .table-wrapper { overflow-x: auto; max-height: 400px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th, td { padding: 6px 8px; border-bottom: 1px solid #eee; }
+        td.numeric, th.numeric { text-align: right; }
+        
+        .clickable-row { cursor: pointer; transition: background 0.2s; }
+        .clickable-row:hover { background-color: #e3f2fd; }
+
+        .th-pagar { background-color: var(--header-pay-bg); color: white; font-weight: bold; font-size: 10px; }
+        .th-receber { background-color: var(--header-rec-bg); color: white; font-weight: bold; font-size: 10px; }
+        
+        /* Estilo original para PAGAMENTOS/RECEBIMENTOS (com total e centralizado) */
+        .total-header {
+            display: flex; /* Adicionado para alinhar título à esquerda e link à direita */
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 5px;
+            border-bottom: 2px solid #eee;
+        }
+        .total-header .header-title { /* Novo: Para o título 'PAGAMENTOS' / 'RECEBIMENTOS' */
+            font-size: 14px; 
+            font-weight: bold;
+        }
+        .total-header .header-link-12 { /* Novo: Para o link 'Clique p/ detalhes' com tamanho 12px */
+            font-size: 12px;
+            font-weight: normal;
+        }
+
+        /* NOVO ESTILO: À PAGAR / À RECEBER (sem total e alinhado) */
+        .total-header-modified {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 5px;
+            border-bottom: 2px solid #eee;
+        }
+        .total-header-modified .header-title {
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .total-header-modified .header-link {
+            font-size: 12px; 
+            font-weight: normal;
+        }
+
+        /* --- Layout Inferior --- */
+        .secondary-split { display: flex; gap: 20px; margin-bottom: 20px; }
+        .panel-40-tables { width: 40%; display: flex; flex-direction: row; gap: 10px; }
+        .panel-40-tables .secondary-panel { flex: 1; min-width: 0; }
+        .panel-60-charts { width: 60%; display: flex; flex-direction: column; gap: 10px; }
+        .chart-pizza-row { display: flex; gap: 10px; flex: 1; }
+        .secondary-panel { background: white; padding: 10px; border-radius: 12px; box-shadow: var(--shadow-card); }
+
+        /* --- Gráficos --- */
+        .chart-wrapper { position: relative; width: 100%; }
+        #monthlyComparisonPanel .chart-wrapper,
+        #monthlyPaidReceivedComparisonPanel .chart-wrapper { height: 170px; }
+        .panel-40 > div[style*="flex: 1"] .sub-panel .chart-wrapper,
+        .chart-pizza-row .sub-panel .chart-wrapper { height: 300px; }
+        .panel-40 > div[style="display: flex; gap: 10px; flex: 1;"] { flex: 1; }
+
+
+        /* --- MODAL --- */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); animation: fadeIn 0.3s; }
+        .modal-content { background-color: #fefefe; margin: 5% auto; padding: 0; border: 1px solid #888; width: 80%; max-width: 1000px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); animation: slideIn 0.3s; }
+        .modal-header { padding: 15px 20px; color: white; border-top-left-radius: 12px; border-top-right-radius: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .modal-body { padding: 20px; max-height: 70vh; overflow-y: auto; }
+        .close { color: white; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close:hover, .close:focus { color: #ddd; text-decoration: none; cursor: pointer; }
+
+        @keyframes fadeIn { from {opacity: 0} to {opacity: 1} }
+        @keyframes slideIn { from {transform: translateY(-50px)} to {transform: translateY(0)} }
+
+        /* --- Login Modal Style --- */
+        #loginModal {
+            display: none; /* Controlado pelo JS no DOMContentLoaded */
+            position: fixed; 
+            z-index: 2000; /* Mais alto que outros elementos */
+            left: 0; top: 0; width: 100%; height: 100%; 
+            background-color: var(--primary-dark); 
+            align-items: center; 
+            justify-content: center;
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        .login-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: var(--shadow-card);
+            width: 300px;
+            text-align: center;
+        }
+
+        .login-content h2 {
+            color: var(--primary-blue);
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        .login-group {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+
+        .login-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: var(--text-dark);
+        }
+
+        .login-group input {
+            width: 100%;
+            padding: 10px;
+            border: var(--border-soft);
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+
+        .login-error {
+            color: #FF0000;
+            font-weight: 600;
+            margin-top: 10px;
+            min-height: 20px; /* Reserva espaço */
+        }
+        /* --- Mobile --- */
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            header { padding: 10px 15px; }
+            header h1 { font-size: 24px; }
+            header img { max-height: 40px; margin-right: 10px; }
+            .controls-container { flex-direction: column; align-items: stretch; }
+            select, input[type="date"], button.btn-load { min-width: 100%; box-sizing: border-box; }
+            .kpi-container { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .kpi-title { font-size: 12px; }
+            .kpi-value { font-size: 18px; }
+            .main-split { flex-direction: column; }
+            .panel-60, .panel-40 { width: 100%; min-height: auto; }
+            .panel-60 { flex-direction: column; gap: 15px; }
+            .panel-40 > div[style="display: flex; gap: 10px; flex: 1;"] { flex-direction: column; gap: 15px; }
+            #monthlyComparisonPanel .chart-wrapper, 
+            #monthlyPaidReceivedComparisonPanel .chart-wrapper { height: 150px; } 
+            .secondary-split { flex-direction: column; gap: 15px; }
+            .panel-40-tables, .panel-60-charts { width: 100%; flex-direction: column; gap: 15px; }
+            .chart-pizza-row { flex-direction: column; gap: 15px; } 
+            .chart-pizza-row .sub-panel .chart-wrapper { height: 250px; } 
+            table { font-size: 9px; }
+            th, td { padding: 4px 6px; }
+            .table-wrapper { max-height: 300px; } 
+        }
+    </style>
+</head>
+<body>
+    
+    <div id="loginModal">
+        <div class="login-content">
+            <h2>Painel Financeiro</h2>
+            <div class="login-group">
+                <label for="username">Usuário</label>
+                <input type="text" id="username" placeholder="Digite seu usuário" onkeyup="if(event.key === 'Enter') document.getElementById('password').focus();">
+            </div>
+            <div class="login-group">
+                <label for="password">Senha</label>
+                <input type="password" id="password" placeholder="Digite sua senha" onkeyup="if(event.key === 'Enter') handleLogin();">
+            </div>
+            <button class="btn-load" onclick="handleLogin()" style="width: 100%; margin-top: 10px;">Entrar</button>
+            <div id="loginError" class="login-error"></div>
+            <p style="font-size: 12px; margin-top: 15px; color: #666;"></p>
+        </div>
+    </div>
+    
+    <header>
+        <img src="LogoMarca.png" alt="Logo" onerror="this.style.display='none'">
+        <h1>Painel Financeiro</h1>
+    </header>
+
+    <div class="controls-container">
+        <input type="file" id="fileInput" accept=".csv" style="display:none">
+        <button class="btn-load" onclick="document.getElementById('fileInput').click()">📂 Carregar Arquivo Local</button>
+
+        <div class="filter-group">
+            <label>Empresa</label>
+            <select id="filterEmpresa"><option value="">Todas</option></select>
+        </div>
+        <div class="filter-group">
+            <label>Rubrica</label>
+            <select id="filterRubrica"><option value="">Todas</option></select>
+        </div>
+        
+        <div class="filter-group">
+            <label>Ano (Venc./Data)</label>
+            <select id="filterAno"><option value="">Todos</option></select>
+        </div>
+        
+        <div class="filter-group">
+            <label>Mês (Venc./Data)</label>
+            <select id="filterMes">
+                <option value="">Todos</option>
+                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option>
+                <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+                <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+                <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>Data Inicial (Venc./Data)</label>
+            <input type="date" id="filterDataIni">
+        </div>
+        <div class="filter-group">
+            <label>Data Final (Venc./Data)</label>
+            <input type="date" id="filterDataFim">
+        </div>
+    </div>
+
+    <div class="kpi-container">
+        <div class="kpi-card">
+            <div class="kpi-title">À Pagar</div>
+            <div class="kpi-value" id="kpiPagar">R$ 0,00</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">À Receber</div>
+            <div class="kpi-value" id="kpiReceber">R$ 0,00</div>
+        </div>
+        <div class="kpi-card" style="border-color: #2196F3;">
+            <div class="kpi-title">Pagos</div>
+            <div class="kpi-value" id="kpiPagos">R$ 0,00</div>
+        </div>
+        <div class="kpi-card" style="border-color: #4CAF50;">
+            <div class="kpi-title">Recebidos</div>
+            <div class="kpi-value" id="kpiRecebidos">R$ 0,00</div>
+        </div>
+    </div>
+
+    <div class="main-split">
+        <div class="panel-60">
+            <div class="sub-panel">
+                <div class="total-header-modified" style="color: var(--header-pay-bg);">
+                    <span class="header-title">À PAGAR</span>
+                    <span class="header-link">Clique p/ detalhes</span>
+                </div>
+                <span id="totalTblPagar" style="display: none;"></span> <div class="table-wrapper">
+                    <table id="tblPagar">
+                        <thead>
+                            <tr class="th-pagar">
+                                <th>RUBRICA</th>
+                                <th class="numeric">VALOR TOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="sub-panel">
+                <div class="total-header-modified" style="color: var(--header-rec-bg);">
+                    <span class="header-title">À RECEBER</span>
+                    <span class="header-link">Clique p/ detalhes</span>
+                </div>
+                <span id="totalTblReceber" style="display: none;"></span> <div class="table-wrapper">
+                    <table id="tblReceber">
+                        <thead>
+                            <tr class="th-receber">
+                                <th>RUBRICA</th>
+                                <th class="numeric">VALOR TOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel-40">
+            <div class="sub-panel" id="monthlyComparisonPanel">
+                <h4 style="text-align:center; margin:5px; color: var(--primary-dark);">Comparativo Mensal (À Pagar vs À Receber)</h4>
+                <div class="chart-wrapper"><canvas id="chartComparativo"></canvas></div>
+            </div>
+            
+            <div style="display: flex; gap: 10px; flex: 1;">
+                <div class="sub-panel">
+                    <h4 style="text-align:center; margin:5px; color: var(--chart-pay-color);">Top Rubricas À PAGAR</h4>
+                    <div class="chart-wrapper"><canvas id="chartPagar"></canvas></div>
+                </div>
+                <div class="sub-panel">
+                    <h4 style="text-align:center; margin:5px; color: var(--chart-rec-color);">Top Rubricas À RECEBER</h4>
+                    <div class="chart-wrapper"><canvas id="chartReceber"></canvas></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <hr>
+    
+    <div class="secondary-split">
+        <div class="panel-40-tables">
+            <div class="secondary-panel">
+                <div class="total-header" style="color: var(--header-pay-bg);">
+                    <span class="header-title">PAGAMENTOS</span>
+                    <span id="totalTblPagamentos" style="display: none;">R$ 0,00</span> <span class="header-link-12">Clique p/ detalhes</span>
+                </div>
+                <div class="table-wrapper">
+                    <table id="tblPagamentos">
+                        <thead>
+                            <tr class="th-pagar">
+                                <th>RUBRICA</th>
+                                <th class="numeric">VALOR TOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="secondary-panel">
+                <div class="total-header" style="color: var(--header-rec-bg);">
+                    <span class="header-title">RECEBIMENTOS</span>
+                    <span id="totalTblRecebimentos" style="display: none;">R$ 0,00</span> <span class="header-link-12">Clique p/ detalhes</span>
+                </div>
+                <div class="table-wrapper">
+                    <table id="tblRecebimentos">
+                        <thead>
+                            <tr class="th-receber">
+                                <th>RUBRICA</th>
+                                <th class="numeric">VALOR TOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel-60-charts">
+            <div class="sub-panel" id="monthlyPaidReceivedComparisonPanel">
+                <h4 style="text-align:center; margin:5px; color: var(--primary-dark);">Comparativo Mensal (Pagos vs Recebidos)</h4>
+                <div class="chart-wrapper"><canvas id="chartPaidReceivedComparativo"></canvas></div>
+            </div>
+
+            <div class="chart-pizza-row">
+                <div class="sub-panel">
+                    <h4 style="text-align:center; margin:5px; color: var(--chart-pay-color);">Top Rubricas PAGOS</h4>
+                    <div class="chart-wrapper"><canvas id="chartPagos"></canvas></div>
+                </div>
+                <div class="sub-panel">
+                    <h4 style="text-align:center; margin:5px; color: var(--chart-rec-color);">Top Rubricas RECEBIDOS</h4>
+                    <div class="chart-wrapper"><canvas id="chartRecebidos"></canvas></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="general-panel">
+        <h3>MOVIMENTO GERAL</h3>
+        <div class="table-wrapper">
+            <table id="tblGeral">
+                <thead>
+                    <tr style="background-color: var(--primary-blue); color: white;">
+                        <th>EMPRESA</th><th>CARTEIRA</th><th>RUBRICA</th><th>NOME</th><th>DATA</th><th>VENCIMENTO</th><th>DOCUMENTO</th><th>PARCELA</th><th class="numeric">VALOR</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <div id="modalDetail" class="modal">
+        <div class="modal-content">
+            <div class="modal-header" id="modalHeader">
+                <h2 id="modalTitle" style="margin:0; font-size: 20px;">Detalhes</h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="modalSummary" style="margin-bottom:15px; font-weight:bold; font-size:16px;"></div>
+                <div class="table-wrapper">
+                    <table id="tblModal">
+                        <thead></thead>
+                        <tbody></
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Variáveis Globais ---
+        let allData = [];
+        let filteredData = []; 
+        let currentPage = 1;
+        const rowsPerPage = 100;
+        
+        let chartPagarInstance = null;
+        let chartReceberInstance = null;
+        let chartComparativoInstance = null; 
+        let chartPagosInstance = null;      
+        let chartRecebidosInstance = null;  
+        let chartPaidReceivedComparativoInstance = null; 
+
+        // --- Variáveis Globais para Login ---
+        const USER_CREDENTIALS = {
+            'admin': 'admin',
+            'demo': 'demo',
+            'user1': 'user1',
+            'user2': 'user2',
+            'user3': 'user3',
+            'user4': 'user4',
+            'user5': 'user5'
+        };
+        // ------------------------------------
+
+        // --- PALETAS DE CORES ---
+        const colorPalettePagar = ['#8B0000', '#87CEFA', '#FFA500', '#808080', '#006400', '#FFFF00', '#FFFFFF', '#90EE90', '#00008B', '#000000'];
+        const colorPaletteReceber = ['#007BFF', '#FF6347', '#FFD700', '#006400', '#808080', '#8B0000', '#FFA500', '#90EE90', '#87CEFA', '#000000'];
+
+        const formatMoney = (val) => val.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+
+        // --- Inicialização e Listeners ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // 1. Garante que o modal de login está visível
+            document.getElementById('loginModal').style.display = 'flex';
+            document.getElementById('username').focus();
+
+            const filterMesEl = document.getElementById('filterMes');
+            const filterAnoEl = document.getElementById('filterAno');
+            
+            // 1. Desabilita Mês inicialmente
+            filterMesEl.disabled = true;
+
+            // Listeners para filtros simples
+            document.getElementById('filterEmpresa').addEventListener('change', applyFilters);
+            document.getElementById('filterRubrica').addEventListener('change', applyFilters);
+            document.getElementById('filterDataIni').addEventListener('change', applyFilters);
+            document.getElementById('filterDataFim').addEventListener('change', applyFilters);
+            
+            // 2. Lógica para Ano (habilita/desabilita Mês e aplica filtros)
+            filterAnoEl.addEventListener('change', () => {
+                const fAno = filterAnoEl.value;
+                filterMesEl.disabled = !fAno;
+                if (!fAno) {
+                    filterMesEl.value = ""; // Limpa Mês se Ano for limpo
+                }
+                // Só aplica filtros se os dados já estiverem carregados (após o login)
+                if (allData.length > 0) applyFilters();
+            });
+
+            // 3. Lógica para Mês (validação e aplica filtros)
+            filterMesEl.addEventListener('change', () => {
+                const fAno = filterAnoEl.value;
+                if (filterMesEl.value && !fAno) {
+                    alert("Atenção: Você deve primeiro selecionar um Ano para poder filtrar por Mês.");
+                    filterMesEl.value = ""; // Reseta a seleção de Mês
+                }
+                // Só aplica filtros se os dados já estiverem carregados (após o login)
+                if (allData.length > 0) applyFilters(); 
+            });
+
+            window.onclick = function(ev) { if (ev.target == document.getElementById("modalDetail")) closeModal(); }
+        });
+        
+        // --- NOVO: Função de Login ---
+        function handleLogin() {
+            const user = document.getElementById('username').value.trim();
+            const pass = document.getElementById('password').value.trim();
+            const errorEl = document.getElementById('loginError');
+
+            if (USER_CREDENTIALS[user] && USER_CREDENTIALS[user] === pass) {
+                // Sucesso no Login
+                errorEl.innerText = '';
+                const modal = document.getElementById('loginModal');
+                modal.style.opacity = '0';
+                setTimeout(() => {
+                    modal.style.display = 'none';
+                    // Inicia o carregamento dos dados e o dashboard
+                    loadInitialData(); 
+                }, 500);
+
+            } else {
+                // Falha no Login
+                errorEl.innerText = 'Usuário ou Senha inválidos.';
+                document.getElementById('password').value = '';
+                document.getElementById('password').focus();
+            }
+        }
+
+        // --- NOVO: Função para carregar dados (movemos o fetch para cá) ---
+        function loadInitialData() {
+            // Tenta carga automática do arquivo CSV (com tratamento de erro)
+            fetch('Movimento Financeiro.csv')
+                .then(r => { 
+                    if (r.ok) {
+                        return r.text(); 
+                    } else {
+                        // Se o status não for OK (ex: 404), lança um erro para cair no catch
+                        throw new Error("CSV not found or response status not ok: " + r.status);
+                    }
+                })
+                .then(t => { 
+                    if (t) {
+                        parseCSV(t); 
+                    }
+                })
+                .catch(e => {
+                    // Exibe o alerta se a busca falhar ou o status não for OK
+                    console.error("Falha ao carregar arquivo de dados automaticamente:", e);
+                    alert("Arquivo de dados não econtrado. Carregar de pasta local");
+                });
+        }
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) { parseCSV(e.target.result); };
+            reader.readAsText(file);
+        });
+
+        function parseCSV(csvText) {
+            Papa.parse(csvText, {
+                header: true, skipEmptyLines: true, dynamicTyping: true,
+                complete: function(results) {
+                    allData = results.data;
+                    populateFilterOptions();
+                    applyFilters();
+                }
+            });
+        }
+        
+        // =======================================================================
+        // --- FUNÇÃO DE PARSING ROBUSTO DE DATA ---
+        // =======================================================================
+        function parseDate(dateStr) {
+            if (!dateStr) return null;
+
+            // 1. Tenta formato ISO (YYYY-MM-DD) - usado por inputs type="date"
+            const isoParts = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+            if (isoParts) {
+                // YYYY = 1, MM = 2, DD = 3
+                const d = new Date(isoParts[1], isoParts[2] - 1, isoParts[3]);
+                if (!isNaN(d.getTime())) return d;
+            }
+
+            // 2. Tenta formato brasileiro (DD/MM/AAAA ou DD-MM-AAAA) - CRÍTICO PARA O CSV
+            const brParts = dateStr.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+            if (brParts) {
+                // DD = 1, MM = 2, YYYY = 3
+                const d = new Date(brParts[3], brParts[2] - 1, brParts[1]); // YYYY, MM (0-indexed), DD
+                if (!isNaN(d.getTime())) return d;
+            }
+            
+            // Se tudo falhar, retorna null
+            return null;
+        }
+
+
+        function populateFilterOptions() {
+            const getUniques = (key) => [...new Set(allData.map(d => d[key]))].sort();
+            const empresas = getUniques('EMPRESA');
+            const rubricas = getUniques('RUBRICA');
+            
+            // Popula anos baseando-se em DATA (padrão)
+            const anos = [...new Set(allData.map(d => {
+                const date = parseDate(d.DATA); 
+                return date ? date.getFullYear() : null;
+            }))].filter(x => x).sort();
+
+            const populate = (id, list) => {
+                const el = document.getElementById(id);
+                el.length = 1;
+                list.forEach(v => el.add(new Option(v, v)));
+            };
+
+            populate('filterEmpresa', empresas);
+            populate('filterRubrica', rubricas);
+            populate('filterAno', anos);
+            
+            // --- Selecionar a primeira empresa ao carregar ---
+            if (empresas.length > 0) {
+                document.getElementById('filterEmpresa').value = empresas[0];
+            }
+        }
+
+        // --- LÓGICA CRÍTICA DE DATAS ---
+        function getFilterDate(row) {
+            if (!row.CARTEIRA) return row.DATA;
+
+            const carteiraStr = row.CARTEIRA.toString().toUpperCase();
+
+            // Títulos em aberto: À PAGAR ou À RECEBER
+            const isPagar = carteiraStr.includes('PAGAR') && !carteiraStr.includes('PAGO');
+            const isReceber = carteiraStr.includes('RECEBER') && !carteiraStr.includes('RECEBIDO');
+
+            if (isPagar || isReceber) {
+                // USA VENCIMENTO PARA FILTRAGEM TEMPORAL DE TÍTULOS EM ABERTO
+                return row.VENCIMENTO; 
+            }
+            
+            // Caso contrário (PAGO, RECEBIDO, ou outros), usa a DATA de movimentação
+            return row.DATA;
+        }
+
+        // --- Filtros Globais ---
+        function applyFilters() {
+            const fEmp = document.getElementById('filterEmpresa').value;
+            const fRub = document.getElementById('filterRubrica').value;
+            const fMes = document.getElementById('filterMes').value;
+            const fAno = document.getElementById('filterAno').value;
+            const fIni = document.getElementById('filterDataIni').value; 
+            const fFim = document.getElementById('filterDataFim').value; 
+            
+            const dFilterIni = fIni ? parseDate(fIni) : null;
+            const dFilterFim = fFim ? parseDate(fFim) : null;
+
+            filteredData = allData.filter(row => {
+                if (fEmp && row.EMPRESA !== fEmp) return false;
+                if (fRub && row.RUBRICA !== fRub) return false;
+
+                const dateStr = getFilterDate(row);
+                const d = parseDate(dateStr); 
+
+                if (!d) return false; 
+
+                // Aplica filtros de Mês e Ano 
+                if (fMes && (d.getMonth() + 1) != fMes) return false;
+                if (fAno && d.getFullYear() != fAno) return false;
+
+                // Aplica filtros de Range 
+                if (dFilterIni && dFilterIni > d) return false; 
+                if (dFilterFim && dFilterFim < d) return false;
+
+                return true;
+            });
+
+            updateDashboard();
+        }
+
+        function updateDashboard() {
+            // Separação de Carteiras 
+            const dataPagar = filteredData.filter(r => r.CARTEIRA && r.CARTEIRA.toString().includes('PAGAR') && !r.CARTEIRA.toString().includes('PAGO'));
+            const dataReceber = filteredData.filter(r => r.CARTEIRA && r.CARTEIRA.toString().includes('RECEBER') && !r.CARTEIRA.toString().includes('RECEBIDO')); 
+            const dataPagos = filteredData.filter(r => r.CARTEIRA && r.CARTEIRA.toString().includes('PAGO'));
+            const dataRecebidos = filteredData.filter(r => r.CARTEIRA && r.CARTEIRA.toString().includes('RECEBIDO'));
+
+            // Painéis
+            // totalTblPagar e totalTblReceber são atualizados, mas estão ocultos no HTML
+            renderConsolidatedTable('tblPagar', dataPagar, 'totalTblPagar', 'kpiPagar', 'PAGAR');
+            renderConsolidatedTable('tblReceber', dataReceber, 'totalTblReceber', 'kpiReceber', 'RECEBER');
+            // totalTblPagamentos e totalTblRecebimentos são atualizados e visíveis
+            renderConsolidatedTable('tblPagamentos', dataPagos, 'totalTblPagamentos', 'kpiPagos', 'PAGO'); 
+            renderConsolidatedTable('tblRecebimentos', dataRecebidos, 'totalTblRecebimentos', 'kpiRecebidos', 'RECEBIDO');
+
+            // Gráficos
+            updateComparisonChart(); 
+            updateCharts(dataPagar, dataReceber);          
+            updatePaidReceivedCharts(dataPagos, dataRecebidos); 
+            updatePaidReceivedComparisonChart(); 
+            
+            // Geral
+            renderGeneralTable(1);
+        }
+
+        // --- Gráfico Comparativo: À Pagar vs À Receber ---
+        function getMonthlyComparisonData() {
+            const today = new Date();
+            const fYear = document.getElementById('filterAno').value;
+            const fMonth = document.getElementById('filterMes').value;
+            
+            let labels, pagarValues, receberValues;
+            
+            // Helper local para somar
+            function sumData(numBuckets, getIndex) {
+                const buckets = Array.from({ length: numBuckets }, () => ({ pagar: 0, receber: 0 }));
+
+                filteredData.forEach(row => { 
+                    const dateStr = getFilterDate(row);
+                    const date = parseDate(dateStr); 
+                    if (!date) return;
+                    
+                    const rowYear = date.getFullYear();
+                    const idx = getIndex(date, rowYear); 
+
+                    if (idx >= 0 && idx < numBuckets) {
+                        const val = parseFloat(row.VALOR) || 0;
+                        const cart = row.CARTEIRA ? row.CARTEIRA.toString().toUpperCase() : '';
+                        
+                        if (cart.includes('PAGAR') && !cart.includes('PAGO')) {
+                            buckets[idx].pagar += val;
+                        } else if (cart.includes('RECEBER') && !cart.includes('RECEBIDO')) {
+                            buckets[idx].receber += val;
+                        }
+                    }
+                });
+                return buckets;
+            }
+
+            // 1. Caso A: Filtro Mês preenchido -> Agrupamento por Dia
+            if (fMonth) {
+                const targetYear = fYear ? parseInt(fYear) : today.getFullYear();
+                const targetMonthIndex = parseInt(fMonth) - 1;
+                const daysInMonth = new Date(targetYear, fMonth, 0).getDate();
+                
+                labels = Array.from({ length: daysInMonth }, (_, i) => (i + 1).toString()); 
+                const res = sumData(daysInMonth, (date, year) => (date.getMonth() === targetMonthIndex && year === targetYear) ? date.getDate() - 1 : -1);
+                pagarValues = res.map(d => d.pagar);
+                receberValues = res.map(d => d.receber);
+            
+            // 2. Caso B: Filtro Ano preenchido (e Mês vazio) -> Agrupamento por Mês
+            } else if (fYear) {
+                const targetYear = parseInt(fYear);
+                labels = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+                const res = sumData(12, (date, year) => (year === targetYear) ? date.getMonth() : -1);
+                pagarValues = res.map(d => d.pagar);
+                receberValues = res.map(d => d.receber);
+            
+            // 3. Caso C: Nenhum filtro temporal (Mês/Ano) -> Agrupamento por Ano (Com base em VENCIMENTO)
+            } else {
+                const allYears = [...new Set(filteredData.map(r => { 
+                    const cart = r.CARTEIRA ? r.CARTEIRA.toString().toUpperCase() : '';
+                    if ((cart.includes('PAGAR') && !cart.includes('PAGO')) || (cart.includes('RECEBER') && !cart.includes('RECEBIDO'))) {
+                        const date = parseDate(r.VENCIMENTO); 
+                        return date ? date.getFullYear() : null;
+                    }
+                    return null;
+                }))].filter(y => y).sort((a, b) => a - b);
+                
+                labels = allYears.map(String);
+                const res = sumData(allYears.length, (date, year) => allYears.indexOf(year));
+                pagarValues = res.map(d => d.pagar);
+                receberValues = res.map(d => d.receber);
+            }
+            
+            const overallMax = Math.max(...pagarValues, ...receberValues);
+            return { labels, pagarData: pagarValues, receberData: receberValues, overallMax };
+        }
+        
+        function updateComparisonChart() {
+            const data = getMonthlyComparisonData();
+            const ctx = document.getElementById('chartComparativo').getContext('2d');
+            if (chartComparativoInstance) chartComparativoInstance.destroy();
+
+            const suggestedMax = data.overallMax > 0 ? data.overallMax * 1.1 : 1000; 
+
+            chartComparativoInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        { label: 'À PAGAR (R$)', data: data.pagarData, backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--chart-pay-color') },
+                        { label: 'À RECEBER (R$)', data: data.receberData, backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--chart-rec-color') }
+                    ]
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, suggestedMax: suggestedMax, ticks: { callback: v => formatMoney(v) } } }
+                }
+            });
+        }
+        
+        // --- Gráfico Comparativo: Pagos vs Recebidos ---
+        function getMonthlyPaidReceivedComparisonData() {
+            const today = new Date();
+            const fYear = document.getElementById('filterAno').value;
+            const fMonth = document.getElementById('filterMes').value;
+            
+            let labels, pagosValues, recebidosValues;
+
+            function sumData(numBuckets, getIndex) {
+                const buckets = Array.from({ length: numBuckets }, () => ({ pagos: 0, recebidos: 0 }));
+
+                filteredData.forEach(row => { 
+                    const dateStr = row.DATA; 
+                    const date = parseDate(dateStr); 
+                    if (!date) return;
+                    const rowYear = date.getFullYear();
+
+                    const idx = getIndex(date, rowYear);
+
+                    if (idx >= 0 && idx < numBuckets) {
+                        const val = parseFloat(row.VALOR) || 0;
+                        const cart = row.CARTEIRA ? row.CARTEIRA.toString().toUpperCase() : '';
+
+                        if (cart.includes('PAGO')) {
+                            buckets[idx].pagos += val;
+                        } else if (cart.includes('RECEBIDO')) {
+                            buckets[idx].recebidos += val;
+                        }
+                    }
+                });
+                return buckets;
+            }
+
+            // 1. Caso A: Filtro Mês preenchido -> Agrupamento por Dia
+            if (fMonth) {
+                const targetYear = fYear ? parseInt(fYear) : today.getFullYear();
+                const targetMonthIndex = parseInt(fMonth) - 1;
+                const daysInMonth = new Date(targetYear, fMonth, 0).getDate();
+                
+                labels = Array.from({ length: daysInMonth }, (_, i) => (i + 1).toString()); 
+                const res = sumData(daysInMonth, (date, year) => (date.getMonth() === targetMonthIndex && year === targetYear) ? date.getDate() - 1 : -1);
+                pagosValues = res.map(d => d.pagos);
+                recebidosValues = res.map(d => d.recebidos);
+            
+            // 2. Caso B: Filtro Ano preenchido (e Mês vazio) -> Agrupamento por Mês
+            } else if (fYear) {
+                const targetYear = parseInt(fYear);
+                labels = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+                const res = sumData(12, (date, year) => (year === targetYear) ? date.getMonth() : -1);
+                pagosValues = res.map(d => d.pagos);
+                recebidosValues = res.map(d => d.recebidos);
+            
+            // 3. Caso C: Nenhum filtro temporal (Mês/Ano) -> Agrupamento por Ano (Com base em DATA)
+            } else {
+                const allYears = [...new Set(filteredData.map(r => { 
+                    const cart = r.CARTEIRA ? r.CARTEIRA.toString().toUpperCase() : '';
+                    if (cart.includes('PAGO') || cart.includes('RECEBIDO')) {
+                        const date = parseDate(r.DATA); 
+                        return date ? date.getFullYear() : null;
+                    }
+                    return null;
+                }))].filter(y => y).sort((a, b) => a - b);
+                
+                labels = allYears.map(String);
+                const res = sumData(allYears.length, (date, year) => allYears.indexOf(year));
+                pagosValues = res.map(d => d.pagos);
+                recebidosValues = res.map(d => d.recebidos);
+            }
+
+            const overallMax = Math.max(...pagosValues, ...recebidosValues);
+            return { labels, pagosData: pagosValues, recebidosData: recebidosValues, overallMax };
+        }
+
+        function updatePaidReceivedComparisonChart() {
+            const data = getMonthlyPaidReceivedComparisonData();
+            const ctx = document.getElementById('chartPaidReceivedComparativo').getContext('2d');
+            if (chartPaidReceivedComparativoInstance) chartPaidReceivedComparativoInstance.destroy();
+
+            const suggestedMax = data.overallMax > 0 ? data.overallMax * 1.1 : 1000; 
+            const colorPagos = getComputedStyle(document.documentElement).getPropertyValue('--chart-pay-color');
+            const colorRecebidos = getComputedStyle(document.documentElement).getPropertyValue('--chart-rec-color');
+
+            chartPaidReceivedComparisonChartInstance = new Chart(ctx, {
+                type: 'bar', 
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        { label: 'PAGOS (R$)', data: data.pagosData, backgroundColor: colorPagos },
+                        { label: 'RECEBIDOS (R$)', data: data.recebidosData, backgroundColor: colorRecebidos }
+                    ]
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, suggestedMax: suggestedMax, ticks: { callback: v => formatMoney(v) } } }
+                }
+            });
+        }
+
+        // --- Tabelas e Modais ---
+        function renderConsolidatedTable(tableId, data, totalId, kpiId, type) {
+            const tbody = document.querySelector(`#${tableId} tbody`);
+            tbody.innerHTML = '';
+            
+            const grouped = {};
+            let grandTotal = 0;
+
+            data.forEach(row => {
+                const rub = row.RUBRICA || 'N/D';
+                const val = parseFloat(row.VALOR) || 0;
+                if (!grouped[rub]) grouped[rub] = { count: 0, total: 0 };
+                grouped[rub].count++;
+                grouped[rub].total += val;
+                grandTotal += val;
+            });
+
+            const sortedGroups = Object.entries(grouped)
+                .map(([key, val]) => ({ rubrica: key, ...val }))
+                .sort((a, b) => b.total - a.total);
+
+            sortedGroups.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = 'clickable-row';
+                tr.onclick = () => openDetailModal(item.rubrica, type); 
+                // QTD TÍTULOS Oculta
+                tr.innerHTML = `<td style="font-weight:600">${item.rubrica}</td><td class="numeric" style="font-weight:bold">${formatMoney(item.total)}</td>`;
+                tbody.appendChild(tr);
+            });
+
+            // Atualiza o ID do total (que é visível para Pagamentos/Recebimentos ou oculto para À Pagar/À Receber)
+            document.getElementById(totalId).innerText = formatMoney(grandTotal); 
+            // Atualiza o KPI (que é sempre visível)
+            if(kpiId) document.getElementById(kpiId).innerText = formatMoney(grandTotal);
+        }
+
+        function openDetailModal(rubrica, type) {
+            const modal = document.getElementById("modalDetail");
+            const header = document.getElementById("modalHeader");
+            const title = document.getElementById("modalTitle");
+            const tbody = document.querySelector("#tblModal tbody");
+            const thead = document.querySelector("#tblModal thead");
+            const summary = document.getElementById("modalSummary");
+
+            const bgColor = (type.includes('PAGAR') || type === 'PAGO') 
+                ? getComputedStyle(document.documentElement).getPropertyValue('--header-pay-bg') 
+                : getComputedStyle(document.documentElement).getPropertyValue('--header-rec-bg');
+                
+            header.style.backgroundColor = bgColor;
+            title.innerText = `Detalhes: ${rubrica} (${type})`;
+
+            const details = filteredData.filter(r => {
+                let isTypeMatch = false;
+                const c = r.CARTEIRA ? r.CARTEIRA.toString().toUpperCase() : '';
+                if (type === 'PAGAR') isTypeMatch = c.includes('PAGAR') && !c.includes('PAGO');
+                else if (type === 'RECEBER') isTypeMatch = c.includes('RECEBER') && !c.includes('RECEBIDO');
+                else if (type === 'PAGO') isTypeMatch = c.includes('PAGO');
+                else if (type === 'RECEBIDO') isTypeMatch = c.includes('RECEBIDO');
+                
+                return r.RUBRICA === rubrica && isTypeMatch;
+            });
+
+            thead.innerHTML = `<tr style="background-color: #f0f0f0;"><th>EMPRESA</th><th>NOME</th><th>DATA</th><th>VENCIMENTO</th><th>DOCUMENTO</th><th class="numeric">VALOR</th></tr>`;
+            tbody.innerHTML = '';
+            let totalModal = 0;
+            details.forEach(row => {
+                const val = parseFloat(row.VALOR) || 0;
+                totalModal += val;
+                tbody.insertAdjacentHTML('beforeend', `<tr><td>${row.EMPRESA || ''}</td><td>${row.NOME || ''}</td><td>${row.DATA || ''}</td><td>${row.VENCIMENTO || ''}</td><td>${row.DOCUMENTO || ''}</td><td class="numeric">${val.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td></tr>`);
+            });
+            summary.innerText = `Total: ${details.length} títulos | Valor: ${formatMoney(totalModal)}`; 
+            modal.style.display = "block";
+        }
+
+        function closeModal() { document.getElementById("modalDetail").style.display = "none"; }
+
+        // --- Gráficos Pizza ---
+        function updateCharts(dataPagar, dataReceber) {
+            const MAX_SLICES = 9;
+            const process = (data) => {
+                const map = {};
+                data.forEach(r => { const k = r.RUBRICA || 'N/D'; map[k] = (map[k] || 0) + (parseFloat(r.VALOR) || 0); });
+                let sorted = Object.entries(map).sort((a,b) => b[1] - a[1]);
+                let topSlices = sorted.slice(0, MAX_SLICES);
+                let othersTotal = sorted.slice(MAX_SLICES).reduce((acc, curr) => acc + curr[1], 0);
+                if (othersTotal > 0) topSlices.push(['OUTRAS RUBRICAS', othersTotal]);
+                return { labels: topSlices.map(i => i[0]), values: topSlices.map(i => i[1]) };
+            }
+
+            const pData = process(dataPagar);
+            const rData = process(dataReceber);
+
+            if (chartPagarInstance) chartPagarInstance.destroy();
+            chartPagarInstance = new Chart(document.getElementById('chartPagar').getContext('2d'), {
+                type: 'pie', data: { labels: pData.labels, datasets: [{ data: pData.values, backgroundColor: colorPalettePagar.slice(0, pData.labels.length) }] },
+                options: { maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+            });
+
+            if (chartReceberInstance) chartReceberInstance.destroy();
+            chartReceberInstance = new Chart(document.getElementById('chartReceber').getContext('2d'), {
+                type: 'pie', data: { labels: rData.labels, datasets: [{ data: rData.values, backgroundColor: colorPaletteReceber.slice(0, rData.labels.length) }] },
+                options: { maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+            });
+        }
+        
+        function updatePaidReceivedCharts(dataPagos, dataRecebidos) {
+            const MAX_SLICES = 9; 
+            const process = (data) => {
+                const map = {};
+                data.forEach(r => { const k = r.RUBRICA || 'N/D'; map[k] = (map[k] || 0) + (parseFloat(r.VALOR) || 0); });
+                let sorted = Object.entries(map).sort((a,b) => b[1] - a[1]);
+                let topSlices = sorted.slice(0, MAX_SLICES);
+                let othersTotal = sorted.slice(MAX_SLICES).reduce((acc, curr) => acc + curr[1], 0);
+                if (othersTotal > 0) topSlices.push(['OUTRAS RUBRICAS', othersTotal]);
+                return { labels: topSlices.map(i => i[0]), values: topSlices.map(i => i[1]) };
+            }
+
+            const pData = process(dataPagos);
+            const rData = process(dataRecebidos);
+            
+            if (chartPagosInstance) chartPagosInstance.destroy();
+            chartPagosInstance = new Chart(document.getElementById('chartPagos').getContext('2d'), {
+                type: 'pie', data: { labels: pData.labels, datasets: [{ data: pData.values, backgroundColor: colorPalettePagar.slice(0, pData.labels.length) }] },
+                options: { maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+            });
+
+            if (chartRecebidosInstance) chartReceberInstance.destroy();
+            chartRecebidosInstance = new Chart(document.getElementById('chartRecebidos').getContext('2d'), {
+                type: 'pie', data: { labels: rData.labels, datasets: [{ data: rData.values, backgroundColor: colorPaletteReceber.slice(0, rData.labels.length) }] },
+                options: { maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+            });
+        }
+
+        // --- Tabela Geral ---
+        function renderGeneralTable(page) {
+            currentPage = page;
+            const tbody = document.querySelector('#tblGeral tbody');
+            tbody.innerHTML = '';
+            const start = (page - 1) * rowsPerPage;
+            const pageData = filteredData.slice(start, start + rowsPerPage);
+            pageData.forEach(row => {
+                tbody.insertAdjacentHTML('beforeend', `<tr><td>${row.EMPRESA||''}</td><td>${row.CARTEIRA||''}</td><td>${row.RUBRICA||''}</td><td>${row.NOME||''}</td><td>${row.DATA||''}</td><td>${row.VENCIMENTO||''}</td><td>${row.DOCUMENTO||''}</td><td>${row.PARCELA||''}</td><td class="numeric">${(parseFloat(row.VALOR)||0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td></tr>`);
+            });
+            renderPagination(filteredData.length);
+        }
+
+        function renderPagination(totalRows) {
+            const totalPages = Math.ceil(totalRows / rowsPerPage);
+            const container = document.getElementById('pagination');
+            container.innerHTML = '';
+            if(currentPage > 1) { const btn = document.createElement('button'); btn.className='page-btn'; btn.innerText='Ant'; btn.onclick=()=>renderGeneralTable(currentPage-1); container.appendChild(btn); }
+            const info = document.createElement('span'); info.style.padding='5px 10px'; info.innerText = `Pág ${currentPage} de ${totalPages}`; container.appendChild(info);
+            if(currentPage < totalPages) { const btn = document.createElement('button'); btn.className='page-btn'; btn.innerText='Próx'; btn.onclick=()=>renderGeneralTable(currentPage+1); container.appendChild(btn); }
+        }
+    </script>
+</body>
+</html>
